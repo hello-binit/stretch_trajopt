@@ -5,7 +5,7 @@ import numpy as np
 
 # Specify URDF filename
 base_path = os.path.dirname(os.path.realpath(__file__))
-filename = os.path.join(base_path, "urdf", "stretch.urdf")
+# filename = os.path.join(base_path, "urdf", "stretch.urdf")
 urdf = os.path.join(base_path, "urdf", "stretch_full.urdf")
 
 ####################### Setup #######################

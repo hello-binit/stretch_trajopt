@@ -62,6 +62,12 @@ class Planner(Manager):
         base_lower_vel_limits, base_upper_vel_limits = self.planar_mobile_base.get_limits(1)
         base_lower_acc_limits, base_upper_acc_limits = self.planar_mobile_base.get_limits(2)
 
+        self.obs = optas.DM.zeros(3, 6)
+        self.obs[0, :] = -0.45
+        self.obs[1, :] = -0.55
+        self.obs[2, :] = optas.DM([0.1, 0.2, 0.3, 0.4, 0.5, 0.6]).T
+        self.obsrad = 0.1 * optas.DM.ones(6)
+
         # Setup optimization builder
         builder = optas.OptimizationBuilder(T=self.T, tasks=[self.planar_mobile_base], robots=[self.stretch])
 
@@ -171,6 +177,11 @@ class Planner(Manager):
         # quat = self.stretch.get_global_link_quaternion_function(link_ee, n=self.T)
         # builder.add_equality_constraint("no_eff_rot", quat(Q), quatc)
 
+        # collision avoidance
+        self.obstacle_names = [f"obs{i}" for i in range(6)]
+        self.link_names = ["link_lift", "link_arm_l4", "link_arm_l3","link_arm_l2", "link_arm_l1", "link_arm_l0", "link_wrist_yaw", "link_gripper"]
+        builder.sphere_collision_avoidance_constraints(self.stretch_name, self.obstacle_names, link_names=self.link_names)
+
         # Setup solver
         optimization = builder.build()
         solver = optas.CasADiSolver(optimization).setup("ipopt")
@@ -181,9 +192,18 @@ class Planner(Manager):
         return True
 
     def reset(self, qc, qn, path, mobile_base_init=[0, 0, 0]):
-        self.solver.reset_parameters({"qc": optas.DM(qc), "qn": optas.DM(qn),
+        params = {"qc": optas.DM(qc), "qn": optas.DM(qn),
                                       "path": optas.DM(path),
-                                      "mobile_base_init": optas.DM(mobile_base_init)})
+                                      "mobile_base_init": optas.DM(mobile_base_init)}
+
+        for link_name in self.link_names:
+            params[link_name + "_radii"] = 0.15
+
+        for i, obstacle_name in enumerate(self.obstacle_names):
+            params[obstacle_name + "_position"] = self.obs[:, i]
+            params[obstacle_name + "_radii"] = self.obsrad[i]
+
+        self.solver.reset_parameters(params)
 
         # Set initial seed, note joint velocity will be set to zero
         Q0 = optas.diag(qc) @ optas.DM.ones(self.stretch.ndof, self.T)
@@ -257,6 +277,8 @@ def main(arg="figure_eight"):
         vis.sphere(position=path_actual[:, i], radius=0.01, rgb=[0, 1, 0])
 
     vis.grid_floor()
+    for i in range(6):
+        vis.sphere(radius=planner.obsrad[i], position=planner.obs[:, i], rgb=[1.0, 0.0, 0.0])
     vis.robot_traj(planner.stretch_full, np.array(interpolated_solution), 
                    animate=True, duration=planner.Tmax)
     vis.start()
