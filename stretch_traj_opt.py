@@ -22,6 +22,11 @@ class PlanarMobileBase(optas.TaskModel):
         return [dx, dy, dtheta]
 
 class Planner(Manager):
+    def __init__(self, time_steps=200, total_trajectory_time=20.0):
+        self.T = time_steps
+        self.Tmax = total_trajectory_time
+        super().__init__()
+
     def setup_solver(self):
         # Setup robot  ========================
 
@@ -33,8 +38,6 @@ class Planner(Manager):
         # =====================================
 
         # Setup
-        self.T = 200  # no. time steps in trajectory
-        self.Tmax = 20.0  # total trajectory time
         t_ = optas.linspace(0, self.Tmax, self.T)
         self.t_ = t_
         self.dt = float((t_[1] - t_[0]).toarray()[0, 0])
