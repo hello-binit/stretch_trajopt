@@ -174,10 +174,15 @@ class CustomAnimationCallback:
         curr_q = robot_traj[:, 0]
         vis.actors.stop_adding_actors()
         curr_robot_vis = vis.robot(planner.stretch_full, curr_q)
+        path_vis = []
+        for k in range(robot_traj.shape[1]):
+            traj_q = np.array(robot_traj[:, k])
+            pn = cs.DM(planner.stretch_full.get_global_link_position("link_grasp_center", traj_q)).full()
+            path_vis.append(vis.sphere(position=pn.flatten(), radius=0.01, rgb=[1, 1, 0]))
         vis.actors.start_adding_actors()
         if robot_traj.shape[1] > 1:
             robot_traj = robot_traj[:, 1:]
-        current = curr_robot_vis
+        current = curr_robot_vis + path_vis
         for actor in current:
             self.ren.AddActor(actor)
 
