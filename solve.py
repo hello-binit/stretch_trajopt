@@ -1,9 +1,19 @@
 import pickle
+import argparse
 import numpy as np
 import casadi as cs
-from stretch_traj_opt import Planner, get_three_point_path
+from stretch_traj_opt import Planner
 
-planner = Planner(200, 20.0)
+parser = argparse.ArgumentParser(description='generate solution.')
+parser.add_argument("--save-dir", nargs="?", type=str, const="",
+                    help="Save soln in given directory.")
+parser.add_argument("--time-steps", type=int, default=200,
+                    help="The number of minutes of data to save.")
+parser.add_argument("--total-time", type=float, default=20.0,
+                    help="The number of minutes of data to save.")
+args, _ = parser.parse_known_args()
+
+planner = Planner(args.time_steps, args.total_time)
 
 # Initial Arm Configuration
 lift_height = 0.5
@@ -17,11 +27,11 @@ pn = cs.DM(planner.stretch.get_global_link_position("link_grasp_center", qc)).fu
 Rn = cs.DM(planner.stretch.get_global_link_rotation("link_grasp_center", qc)).full()
 t  = cs.DM(planner.t_).full()
 
-path = get_three_point_path(planner.T,
-    -1.0, -1.0, -0.2,
-     0.0, -1.0,  0.0,
-     0.0,  0.0,  0.0,
-)
+path = np.stack([
+    np.linspace(0.0, 1.0, planner.T),
+    np.linspace(0.0, 0.0, planner.T),
+    np.linspace(0.0, 0.0, planner.T),
+])
 
 # Transform path to end effector in global frame
 for k in range(planner.T):
@@ -39,7 +49,7 @@ for k in range(planner.T):
     path_actual[:, k] = pn.flatten()
 
 # Optionally: interpolate between timesteps for smoother animation
-timestep_mult = 2 # 1 means no interpolation
+timestep_mult = 1 # 1 means no interpolation
 original_timesteps = np.linspace(0, 1, stretch_full_plan.size2())
 interpolated_timesteps = np.linspace(0, 1,
                                         timestep_mult * stretch_full_plan.size2())
@@ -51,11 +61,11 @@ for i in range(stretch_full_plan.size1()):
                                                 interpolated_timesteps)
 interpolated_solution = np.array(interpolated_solution)
 
-with open('path.pkl', 'wb') as f:
+with open(f'{args.save_dir}/path.pkl', 'wb') as f:
     pickle.dump(path, f)
 
-with open('path_actual.pkl', 'wb') as f:
+with open(f'{args.save_dir}/path_actual.pkl', 'wb') as f:
     pickle.dump(path_actual, f)
 
-with open('interpolated_solution.pkl', 'wb') as f:
+with open(f'{args.save_dir}/interpolated_solution.pkl', 'wb') as f:
     pickle.dump(interpolated_solution, f)
