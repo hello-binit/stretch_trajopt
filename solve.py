@@ -28,7 +28,7 @@ Rn = cs.DM(planner.stretch.get_global_link_rotation("link_grasp_center", qc)).fu
 t  = cs.DM(planner.t_).full()
 
 path = np.stack([
-    np.linspace(0.0, 1.0, planner.T),
+    np.linspace(0.0, 0.1, planner.T),
     np.linspace(0.0, 0.0, planner.T),
     np.linspace(0.0, 0.0, planner.T),
 ])
