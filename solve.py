@@ -23,24 +23,25 @@ qc = np.array([lift_height, arm_extention/4, arm_extention/4,
                         arm_extention/4, arm_extention/4, wrist_yaw])
 qn = qc
 
-pn = cs.DM(planner.stretch.get_global_link_position("link_grasp_center", qc)).full()
-Rn = cs.DM(planner.stretch.get_global_link_rotation("link_grasp_center", qc)).full()
-t  = cs.DM(planner.t_).full()
-
+# Create desired path
 path = np.stack([
-    np.linspace(0.0, 0.1, planner.T),
     np.linspace(0.0, 0.0, planner.T),
+    np.linspace(0.0, 0.1, planner.T),
     np.linspace(0.0, 0.0, planner.T),
 ])
 
 # Transform path to end effector in global frame
+pn = cs.DM(planner.stretch.get_global_link_position("link_grasp_center", qc)).full()
+Rn = cs.DM(planner.stretch.get_global_link_rotation("link_grasp_center", qc)).full()
 for k in range(planner.T):
     path[:, k] = pn.flatten() + Rn @ path[:, k]
 
+# Plan!
 planner.reset(qc, qn, path)
 stretch_plan, mobile_base_plan = planner.plan()
 stretch_full_plan = cs.vertcat(mobile_base_plan, stretch_plan)
 
+# Calculate actual path taken
 path_actual = np.zeros((3, planner.T))
 for k in range(planner.T):
     q_sol = np.array(stretch_full_plan[:, k])
@@ -61,6 +62,7 @@ for i in range(stretch_full_plan.size1()):
                                                 interpolated_timesteps)
 interpolated_solution = np.array(interpolated_solution)
 
+# Save
 with open(f'{args.save_dir}/path.pkl', 'wb') as f:
     pickle.dump(path, f)
 
