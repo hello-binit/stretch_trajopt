@@ -87,10 +87,10 @@ listener.start()
 
 ############ MPC ############
 
-def mpc_solve(lift_height, arm_extension, wrist_yaw, xyz_delta):
+def mpc_solve(full_q, xyz_delta):
     # Initial configuration
-    qc = np.array([lift_height, arm_extension/4, arm_extension/4,
-                   arm_extension/4, arm_extension/4, wrist_yaw])
+    mobile_base_init = [full_q[0], full_q[1], full_q[2]]
+    qc = full_q[3:]
     qn = qc
 
     # Create desired path
@@ -107,7 +107,7 @@ def mpc_solve(lift_height, arm_extension, wrist_yaw, xyz_delta):
         path[:, k] = pn.flatten() + Rn @ path[:, k]
 
     # Plan!
-    planner.reset(qc, qn, path)
+    planner.reset(qc, qn, path, mobile_base_init=mobile_base_init)
     stretch_plan, mobile_base_plan = planner.plan()
     stretch_full_plan = cs.vertcat(mobile_base_plan, stretch_plan)
 
@@ -116,10 +116,23 @@ def mpc_solve(lift_height, arm_extension, wrist_yaw, xyz_delta):
 def handle_mpc(shutdown_flag):
     while not shutdown_flag.is_set():
         if any(keys.values()):
-            # Pick where to plan from # TODO
-            print('hey!1')
-            print(keys)
-            print(robot_traj.shape)
+            # Pick where to plan from
+            global robot_traj
+            pick_index = 15
+            pick_q = robot_traj[:, pick_index] if robot_traj.shape[1] > pick_index else robot_traj[:, -1]
+
+            # Convert teleop to xyz delta
+            delta_vel = 0.1
+            x_vel = delta_vel * int(keys['x+']) + -1 * delta_vel * int(keys['x-'])
+            y_vel = delta_vel * int(keys['y+']) + -1 * delta_vel * int(keys['y-'])
+            z_vel = delta_vel * int(keys['z+']) + -1 * delta_vel * int(keys['z-'])
+            xyz_vel = [x_vel, y_vel, z_vel]
+
+            # take a model predictive control step
+            plan = mpc_solve(pick_q, xyz_vel)
+
+            # append to robot trajectory
+            robot_traj = np.hstack([robot_traj, plan])
 
 mpc_thread_shutdown_flag = threading.Event()
 mpc_thread = threading.Thread(target=handle_mpc, args=(mpc_thread_shutdown_flag,))
@@ -158,15 +171,13 @@ class CustomAnimationCallback:
 
         # Create new actors
         global robot_traj
-        try:
-            curr_q = robot_traj[:, 0]
-            vis.actors.stop_adding_actors()
-            self.curr_robot_vis = vis.robot(planner.stretch_full, curr_q)
-            vis.actors.start_adding_actors()
+        curr_q = robot_traj[:, 0]
+        vis.actors.stop_adding_actors()
+        curr_robot_vis = vis.robot(planner.stretch_full, curr_q)
+        vis.actors.start_adding_actors()
+        if robot_traj.shape[1] > 1:
             robot_traj = robot_traj[:, 1:]
-        except:
-            pass
-        current = self.curr_robot_vis
+        current = curr_robot_vis
         for actor in current:
             self.ren.AddActor(actor)
 
