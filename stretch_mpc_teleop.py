@@ -132,7 +132,7 @@ def handle_mpc(shutdown_flag):
             plan = mpc_solve(pick_q, xyz_vel)
 
             # append to robot trajectory
-            robot_traj = np.hstack([robot_traj, plan])
+            robot_traj = np.hstack([robot_traj[:, :pick_index], plan])
 
 mpc_thread_shutdown_flag = threading.Event()
 mpc_thread = threading.Thread(target=handle_mpc, args=(mpc_thread_shutdown_flag,))
@@ -174,7 +174,7 @@ class CustomAnimationCallback:
         # Create new actors
         global robot_traj, last_time
         next_index = min(int(np.round(10 * (time.time() - last_time))), robot_traj.shape[1])
-        # print(robot_traj.shape, time.time() - last_time, int(np.round(10 * (time.time() - last_time))), next_index)
+        # print(robot_traj.shape, f"{time.time() - last_time:.2f}", int(np.round(10 * (time.time() - last_time))), next_index)
         last_time = time.time()
         curr_q = robot_traj[:, next_index-1]
         vis.actors.stop_adding_actors()
@@ -186,7 +186,8 @@ class CustomAnimationCallback:
         #     pn = cs.DM(planner.stretch_full.get_global_link_position("link_grasp_center", traj_q)).full()
         #     path_vis.append(vis.sphere(position=pn.flatten(), radius=0.01, rgb=[1, 1, 0]))
         vis.actors.start_adding_actors()
-        robot_traj = robot_traj[:, next_index-1:]
+        if robot_traj.shape[1] > 1:
+            robot_traj = robot_traj[:, next_index:]
         current = curr_robot_vis + path_vis
         for actor in current:
             self.ren.AddActor(actor)
