@@ -1,3 +1,4 @@
+import vtk
 import time
 import optas
 import threading
@@ -10,9 +11,8 @@ from stretch_traj_opt import Planner
 
 vis = optas.Visualizer(camera_position=[3, 3, 3])
 planner = Planner(20, 2.0)
-robot_traj = []
 
-# Setup vis of current robot position
+# the planned trajectory is initially just the robot's starting configuration
 init_lift_height = 0.5
 init_arm_extension = 0.25
 init_wrist_yaw = np.deg2rad(0.0)
@@ -22,9 +22,7 @@ init_mobile_base_theta = 0.0
 init_q = np.array([init_mobile_base_x, init_mobile_base_y, init_mobile_base_theta,
                    init_lift_height, init_arm_extension/4, init_arm_extension/4,
                    init_arm_extension/4, init_arm_extension/4, init_wrist_yaw])
-vis.actors.stop_adding_actors()
-robot_curr = vis.robot(planner.stretch_full, init_q)
-vis.actors.start_adding_actors()
+robot_traj = init_q.reshape((9, 1))
 
 ############ TELEOP ############
 
@@ -53,13 +51,13 @@ def on_press(key):
         keys['y+'] = True
     elif key == keyboard.Key.right:
         keys['y-'] = True
-    elif key == keyboard.Key.w:
+    elif key == keyboard.KeyCode.from_char('w'):
         keys['z+'] = True
-    elif key == keyboard.Key.s:
+    elif key == keyboard.KeyCode.from_char('s'):
         keys['z-'] = True
-    elif key == keyboard.Key.a:
+    elif key == keyboard.KeyCode.from_char('a'):
         keys['yaw+'] = True
-    elif key == keyboard.Key.d:
+    elif key == keyboard.KeyCode.from_char('d'):
         keys['yaw-'] = True
 
 def on_release(key):
@@ -71,13 +69,13 @@ def on_release(key):
         keys['y+'] = False
     elif key == keyboard.Key.right:
         keys['y-'] = False
-    elif key == keyboard.Key.w:
+    elif key == keyboard.KeyCode.from_char('w'):
         keys['z+'] = False
-    elif key == keyboard.Key.s:
+    elif key == keyboard.KeyCode.from_char('s'):
         keys['z-'] = False
-    elif key == keyboard.Key.a:
+    elif key == keyboard.KeyCode.from_char('a'):
         keys['yaw+'] = False
-    elif key == keyboard.Key.d:
+    elif key == keyboard.KeyCode.from_char('d'):
         keys['yaw-'] = False
 
 listener = keyboard.Listener(
@@ -85,7 +83,7 @@ listener = keyboard.Listener(
     on_release=on_release,
     suppress=False, # We want optas.Visualizer to catch 'q' to exit
 )
-# listener.start() # TODO
+listener.start()
 
 ############ MPC ############
 
@@ -117,16 +115,28 @@ def mpc_solve(lift_height, arm_extension, wrist_yaw, xyz_delta):
 
 def handle_mpc(shutdown_flag):
     while not shutdown_flag.is_set():
-        pass # TODO
-        # vis.robot_traj(planner.stretch_full, interpolated_solution, animate=True)
-        # robot_traj = vis.animate_callbacks[0].traj
-        # vis.animate_callbacks = []
+        if any(keys.values()):
+            # Pick where to plan from # TODO
+            print('hey!1')
+            print(keys)
+            print(robot_traj.shape)
 
 mpc_thread_shutdown_flag = threading.Event()
 mpc_thread = threading.Thread(target=handle_mpc, args=(mpc_thread_shutdown_flag,))
-# mpc_thread.start() # TODO
+mpc_thread.start()
 
 ############ VISUALIZE ############
+
+# disable 'w'/'s' keys enabling/disabling wireframe vis - https://stackoverflow.com/a/69296623
+class MyInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
+  def __init__(self, parent = None):
+    self.AddObserver('CharEvent', self.OnChar)
+
+  def OnChar(self, obj, event):
+      if obj.GetInteractor().GetKeyCode() == "w":
+          return
+      super(MyInteractorStyle, obj).OnChar()
+vis.iren.SetInteractorStyle(MyInteractorStyle())
 
 class CustomAnimationCallback:
     def __init__(self, iren, ren):
@@ -147,10 +157,16 @@ class CustomAnimationCallback:
                 self.ren.RemoveActor(actor)
 
         # Create new actors
+        global robot_traj
         try:
-            current = robot_traj.pop(0)
+            curr_q = robot_traj[:, 0]
+            vis.actors.stop_adding_actors()
+            self.curr_robot_vis = vis.robot(planner.stretch_full, curr_q)
+            vis.actors.start_adding_actors()
+            robot_traj = robot_traj[:, 1:]
         except:
-            current = robot_curr
+            pass
+        current = self.curr_robot_vis
         for actor in current:
             self.ren.AddActor(actor)
 
@@ -168,4 +184,4 @@ vis.start()
 
 listener.stop()
 mpc_thread_shutdown_flag.set()
-# mpc_thread.join() # TODO
+mpc_thread.join()
