@@ -1,21 +1,32 @@
-import time
+import pickle
+import argparse
 from stretch_traj_opt import Planner
 from optas.visualize import Visualizer
 
-from vtkmodules.vtkCommonColor import vtkNamedColors
-from vtkmodules.vtkFiltersSources import vtkCylinderSource
-from vtkmodules.vtkRenderingCore import (
-    vtkActor,
-    vtkPolyDataMapper,
-)
 
-start = time.time()
-colors = vtkNamedColors()
-cylinder = vtkCylinderSource()
-cylinder.SetResolution(8)
+parser = argparse.ArgumentParser(description='mpc')
+parser.add_argument("--load-dir", nargs="?", type=str, const="",
+                    help="load soln from given directory.")
+parser.add_argument("--time-steps", type=int, default=200,
+                    help="The number of minutes of data to save.")
+parser.add_argument("--total-time", type=float, default=20.0,
+                    help="The number of minutes of data to save.")
+args, _ = parser.parse_known_args()
 
-cylinderMapper = vtkPolyDataMapper()
-cylinderMapper.SetInputConnection(cylinder.GetOutputPort())
+with open(f'{args.load_dir}/path.pkl', 'rb') as f:
+    path = pickle.load(f)
+
+with open(f'{args.load_dir}/path_actual.pkl', 'rb') as f:
+    path_actual = pickle.load(f)
+
+with open(f'{args.load_dir}/interpolated_solution.pkl', 'rb') as f:
+    interpolated_solution = pickle.load(f)
+
+planner = Planner(args.time_steps, args.total_time)
+vis = Visualizer()
+vis.robot_traj(planner.stretch_full, interpolated_solution, animate=True)
+robot_traj = vis.animate_callbacks[0].traj
+vis.animate_callbacks = []
 
 
 class CustomAnimationCallback:
@@ -37,15 +48,13 @@ class CustomAnimationCallback:
                 self.ren.RemoveActor(actor)
 
         # Create new actors
-        current = []
-        cylinderActor = vtkActor()
-        cylinderActor.SetMapper(cylinderMapper)
-        cylinderActor.GetProperty().SetColor(colors.GetColor3d('Tomato'))
-        cylinderActor.RotateX(6 * (time.time() - start) % 30.0)
-        cylinderActor.RotateY(-45.0)
-        current.append(cylinderActor)
-        for actor in current:
-            self.ren.AddActor(actor)
+        try:
+            current = robot_traj.pop(0)
+        except:
+            current = None
+        if current is not None:
+            for actor in current:
+                self.ren.AddActor(actor)
 
         # Render to window
         self.iren.GetRenderWindow().Render()
@@ -53,8 +62,6 @@ class CustomAnimationCallback:
         # Reset
         self.prev = current
 
-vis = Visualizer()
-# vis.actors.append(cylinderActor)
 vis.animate_callbacks.append(CustomAnimationCallback(vis.iren, vis.ren))
 vis.grid_floor()
 vis.start()
