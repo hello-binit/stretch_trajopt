@@ -140,6 +140,8 @@ mpc_thread.start()
 
 ############ VISUALIZE ############
 
+last_time = time.time()
+
 # disable 'w'/'s' keys enabling/disabling wireframe vis - https://stackoverflow.com/a/69296623
 class MyInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
   def __init__(self, parent = None):
@@ -157,7 +159,7 @@ class CustomAnimationCallback:
         self.iren = iren
         self.prev = None
         self.ren = ren
-        self.dt_ms = 100
+        self.dt_ms = 100 # profiled on i5-2520M, this loop gets called every 170ms at best
 
     def start(self):
         self.iren.AddObserver("TimerEvent", self.callback)
@@ -170,18 +172,21 @@ class CustomAnimationCallback:
                 self.ren.RemoveActor(actor)
 
         # Create new actors
-        global robot_traj
-        curr_q = robot_traj[:, 0]
+        global robot_traj, last_time
+        next_index = min(int(np.round(10 * (time.time() - last_time))), robot_traj.shape[1])
+        # print(robot_traj.shape, time.time() - last_time, int(np.round(10 * (time.time() - last_time))), next_index)
+        last_time = time.time()
+        curr_q = robot_traj[:, next_index-1]
         vis.actors.stop_adding_actors()
         curr_robot_vis = vis.robot(planner.stretch_full, curr_q)
         path_vis = []
-        for k in range(robot_traj.shape[1]):
-            traj_q = np.array(robot_traj[:, k])
-            pn = cs.DM(planner.stretch_full.get_global_link_position("link_grasp_center", traj_q)).full()
-            path_vis.append(vis.sphere(position=pn.flatten(), radius=0.01, rgb=[1, 1, 0]))
+        # # Visualizing sphere slows things down considerably...
+        # for k in range(robot_traj.shape[1]):
+        #     traj_q = np.array(robot_traj[:, k])
+        #     pn = cs.DM(planner.stretch_full.get_global_link_position("link_grasp_center", traj_q)).full()
+        #     path_vis.append(vis.sphere(position=pn.flatten(), radius=0.01, rgb=[1, 1, 0]))
         vis.actors.start_adding_actors()
-        if robot_traj.shape[1] > 1:
-            robot_traj = robot_traj[:, 1:]
+        robot_traj = robot_traj[:, next_index-1:]
         current = curr_robot_vis + path_vis
         for actor in current:
             self.ren.AddActor(actor)
